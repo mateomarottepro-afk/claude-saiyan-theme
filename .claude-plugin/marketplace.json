@@ -1,0 +1,5 @@
+{
+  "name": "claude-saiyan-theme",
+  "owner": { "name": "claude-saiyan-theme" },
+  "plugins": [{ "name": "saiyan-transformation", "source": "./" }]
+}
