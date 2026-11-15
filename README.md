@@ -7,18 +7,18 @@ Un thème pour l'app Claude (desktop et mobile) : couleurs bleu nuit et or, et u
 Dans un terminal Claude Code, au prompt :
 
 ```
-/plugin install saiyan-transformation --marketplace COMPTE/claude-saiyan-theme
+/plugin install saiyan-transformation --marketplace pablo/claude-saiyan-theme
 ```
 
 Ou depuis un shell :
 
 ```
-claude plugin install saiyan-transformation --marketplace COMPTE/claude-saiyan-theme
+claude plugin install saiyan-transformation --marketplace pablo/claude-saiyan-theme
 ```
 
 Répondre `y` pour ajouter la marketplace, puis choisir la portée (utilisateur par défaut).
 
-Dans l'app desktop : cliquer sur + à côté de la zone de saisie, puis Plugins, « Add marketplace » avec `COMPTE/claude-saiyan-theme`, puis « Add plugin ».
+Dans l'app desktop : cliquer sur + à côté de la zone de saisie, puis Plugins, « Add marketplace » avec `pablo/claude-saiyan-theme`, puis « Add plugin ».
 
 ## Ce que fait le mod
 
