@@ -23,43 +23,33 @@ const { theme, problems } = makeColors({
 })
 
 // --- Scène : orage, éclairs, aura dorée en pointes, sol rocheux, mascotte. ---
-// L'app retire toute animation (CSS comme SMIL) du SVG qu'elle dessine, n'affiche
-// pas les images de fond, et ne redessine une scène que deux fois par seconde
-// (mesuré). La scène est donc une fonction du temps, `scene(t)`, pensée en
-// poses tenues une demi-seconde, comme une animation image par image.
+// La scène est un seul SVG animé en SMIL, dessiné en mode interactif : l'app le
+// joue elle-même, de façon fluide, sans que le mod ait à le redessiner.
 
 type Timing = { k?: string; begin?: number; discrete?: boolean }
+type Wrap = (content: string) => string
 
-const scene = (T: number) => {
-// Valeur à l'instant T d'une suite de valeurs-clés qui boucle sur `dur` secondes.
-const at = (values: string, dur: number, o: Timing = {}) => {
-  const vs = values.split(';')
-  const n = vs.length
-  const ks = o.k ? o.k.split(';').map(Number) : vs.map((_, i) => (o.discrete ? i / n : i / (n - 1)))
-  const p = ((((T - (o.begin ?? 0)) % dur) + dur) % dur) / dur
-  let i = 0
+const scene = () => {
+// Attributs SMIL d'une suite de valeurs-clés qui boucle sur `dur` secondes.
+const smil = (values: string, dur: number, o: Timing) =>
+  ` values="${values}" dur="${dur}s" begin="${o.begin ?? 0}s"` +
+  (o.k ? ` keyTimes="${o.k}"` : '') +
+  (o.discrete ? ' calcMode="discrete"' : '') +
+  ' repeatCount="indefinite"'
 
-  while (i < ks.length - 1 && p >= ks[i + 1]) {
-    i++
-  }
+// Un <animate>, à placer dans l'élément qu'il anime.
+const anim = (attr: string, values: string, dur: number, o: Timing = {}) =>
+  `<animate attributeName="${attr}"${smil(values, dur, o)}/>`
 
-  if (o.discrete || i >= n - 1) {
-    return vs[Math.min(i, n - 1)]
-  }
-  const f = (p - ks[i]) / (ks[i + 1] - ks[i])
-  const a = vs[i].split(' ').map(Number)
-  const b = vs[i + 1].split(' ').map(Number)
+// Un groupe animé par une transformation, autour de `content`.
+const move =
+  (type: 'translate' | 'scale' | 'rotate', values: string, dur: number, o: Timing = {}): Wrap =>
+  content =>
+    `<g><animateTransform attributeName="transform" type="${type}"${smil(values, dur, o)}/>${content}</g>`
 
-  return a.map((x, j) => (x + (b[j] - x) * f).toFixed(2)).join(' ')
-}
-
-const anim = (attr: string, values: string, dur: number, o: Timing = {}) => ` ${attr}="${at(values, dur, o)}"`
-
-const move = (type: 'translate' | 'scale' | 'rotate', values: string, dur: number, o: Timing = {}) => `${type}(${at(values, dur, o)})`
-
-// Applique `transform` à `content` autour du point (x, y).
-const pivot = (x: number, y: number, transform: string, content: string) =>
-  `<g transform="translate(${x} ${y}) ${transform} translate(${-x} ${-y})">${content}</g>`
+// Applique `m` à `content` autour du point (x, y).
+const pivot = (x: number, y: number, m: Wrap, content: string) =>
+  `<g transform="translate(${x} ${y})">${m(`<g transform="translate(${-x} ${-y})">${content}</g>`)}</g>`
 
 const rng = (seed: number) => () => {
   seed = (seed * 1664525 + 1013904223) >>> 0
@@ -99,9 +89,8 @@ const auraLayer = (halfW: number, height: number, n: number, seed: number, fill:
     [0, 1, 2]
       .map(
         k =>
-          at('1;0;0', 1.5, { k: '0;0.334;1', begin: -1.5 + k * 0.5, discrete: true }) === '1'
-            ? `<polygon points="${aura(800, 930, halfW, height, n, seed + k * 7)}" fill="${fill}" fill-opacity="${opacity}"/>`
-            : '',
+          `<polygon points="${aura(800, 930, halfW, height, n, seed + k * 7)}" fill="${fill}" fill-opacity="${opacity}">` +
+          `${anim('opacity', '1;0;0', 1.5, { k: '0;0.334;1', begin: -1.5 + k * 0.5, discrete: true })}</polygon>`,
       )
       .join(''),
   )
@@ -142,12 +131,9 @@ const BOLT_ATTRS = 'fill="none" stroke-linejoin="round" stroke-linecap="round"'
 
 // Éclair du ciel : il se trace de haut en bas, clignote, puis s'éteint.
 const skyBolt = (x: number, seed: number, dur: number, begin: number, thin = false) =>
-  Number(at('1;1;0.2;1;0.35;1;0;0', dur, { k: '0;0.03;0.045;0.06;0.08;0.1;0.15;1', begin })) < 0.02
-    ? ''
-    : `<g ${BOLT_ATTRS} stroke-dasharray="1"${thin ? ` transform="translate(${x} 0) scale(0.6 1) translate(${-x} 0)"` : ''}` +
-      ''+
-      `${anim('opacity', '1;1;0.2;1;0.35;1;0;0', dur, { k: '0;0.03;0.045;0.06;0.08;0.1;0.15;1', begin })}>` +
-      `${boltLines(x, seed)}</g>`
+  `<g ${BOLT_ATTRS}${thin ? ` transform="translate(${x} 0) scale(0.6 1) translate(${-x} 0)"` : ''}>` +
+  `${anim('opacity', '1;1;0.2;1;0.35;1;0;0', dur, { k: '0;0.03;0.045;0.06;0.08;0.1;0.15;1', begin })}` +
+  `${boltLines(x, seed)}</g>`
 
 const BOLTS =
   `<g class="bl">${skyBolt(250, 5, 5.2, 0)}</g>` +
@@ -157,7 +143,7 @@ const BOLTS =
     .join('')
 
 const flash = (dur: number, begin: number) =>
-  `<rect width="1600" height="1000" fill="#bfe6ff"${anim('opacity', '0.14;0;0.1;0;0', dur, { k: '0;0.03;0.05;0.09;1', begin, discrete: true })}/>`
+  `<rect width="1600" height="1000" fill="#bfe6ff" opacity="0">${anim('opacity', '0.14;0;0.1;0;0', dur, { k: '0;0.03;0.05;0.09;1', begin, discrete: true })}</rect>`
 
 // Petit arc électrique en zigzag, qui crépite.
 const arc = (x: number, y: number, seed: number, delay: number, dur: number) => {
@@ -173,7 +159,7 @@ const arc = (x: number, y: number, seed: number, delay: number, dur: number) => 
     pts.push(`${n0(px)},${n0(py)}`)
   }
 
-  return at('1;0;1;0;0', dur, { k: '0;0.05;0.08;0.13;1', begin: delay - dur, discrete: true }) === '1' ? `<polyline points="${pts.join(' ')}"/>` : ''
+  return `<polyline points="${pts.join(' ')}" opacity="0">${anim('opacity', '1;0;1;0;0', dur, { k: '0;0.05;0.08;0.13;1', begin: delay - dur, discrete: true })}</polyline>`
 }
 
 const arcs = (list: number[][], width: number) =>
@@ -211,8 +197,9 @@ const SPARKS = [
 ]
   .map(
     ([x, d, t, r]) =>
-      `<circle cx="${x}" cy="900" r="${r}" fill="#fff3a0" transform="${move('translate', '0 0;0 -820', t, { begin: d - t })}"` +
-      `${anim('opacity', '0;1;0', t, { k: '0;0.1;1', begin: d - t })}/>`,
+      move('translate', '0 0;0 -820', t, { begin: d - t })(
+        `<circle cx="${x}" cy="900" r="${r}" fill="#fff3a0" opacity="0">${anim('opacity', '0;1;0', t, { k: '0;0.1;1', begin: d - t })}</circle>`,
+      ),
   )
   .join('')
 
@@ -226,7 +213,9 @@ const CLOUDS = (
   .map(
     ([x, y, rx, ry, c, t, d]) =>
       `<radialGradient id="cl${x}"><stop offset="0.25" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>` +
-      `<ellipse cx="${x}" cy="${y}" rx="${rx * 1.35}" ry="${ry * 1.5}" fill="url(#cl${x})" transform="${move('translate', '-70 0;70 0;-70 0', t, { begin: d })}"/>`,
+      move('translate', '-70 0;70 0;-70 0', t, { begin: d })(
+        `<ellipse cx="${x}" cy="${y}" rx="${rx * 1.35}" ry="${ry * 1.5}" fill="url(#cl${x})"/>`,
+      ),
   )
   .join('')
 
@@ -250,9 +239,8 @@ const lock = (bx: number, w: number, tx: number, ty: number, fill: string, i: nu
 
 // Les cheveux jaillissent à la transformation (cycle de 10 s) puis retombent.
 const hairRise = (content: string) =>
-  at('0;1', 10, { k: '0;0.255', discrete: true }) === '0'
-    ? ''
-    : pivot(128, 6, move('scale', '1 0;1 0;1.06 1.18;1 1;1 1;1 0', 10, { k: '0;0.25;0.285;0.32;0.94;1' }), content)
+  `<g opacity="0">${anim('opacity', '0;1', 10, { k: '0;0.255', discrete: true })}` +
+  `${pivot(128, 6, move('scale', '1 0;1 0;1.06 1.18;1 1;1 1;1 0', 10, { k: '0;0.25;0.285;0.32;0.94;1' }), content)}</g>`
 
 // Mèches dressées en éventail : un rang sombre derrière, un rang clair devant.
 const HAIR = hairRise(
@@ -281,63 +269,64 @@ const ARM_JAB = move(
   10,
   { k: '0;0.13;0.17;0.24;0.28;0.34;0.4;0.42;0.45;0.47;0.51;0.68;0.705;0.75;0.92;1' },
 )
-const leg = (x: number, begin: number) => `<rect x="${x}" y="96" width="16" height="32" transform="${move('translate', '0 0;0 -5;0 0', 1.4, { begin })}"/>`
+const leg = (x: number, begin: number) => move('translate', '0 0;0 -5;0 0', 1.4, { begin })(`<rect x="${x}" y="96" width="16" height="32"/>`)
 const eye = (x: number) =>
-  `<rect x="${x}" y="20" width="16" height="32"${anim('fill', '#1b1b1b;#22e0d0;#1b1b1b', 10, { k: '0;0.26;0.97', discrete: true })}/>`
+  `<rect x="${x}" y="20" width="16" height="32" fill="#1b1b1b">${anim('fill', '#1b1b1b;#22e0d0;#1b1b1b', 10, { k: '0;0.26;0.97', discrete: true })}</rect>`
 
 // Mascotte en pixels : forme normale, puis cheveux dorés dressés, regard turquoise.
 // Trois mouvements emboîtés : flottement et charges, tremblement, puis le corps.
 const MASCOT =
-  `<g transform="translate(672 772) ` +
+  `<g transform="translate(672 772)">` +
   move('translate', '0 0;0 0;0 -22;10 -14;-46 -16;0 -14;-46 -16;0 -20;12 -12;-60 -18;0 -14;0 -22;0 -16;0 0', 10, {
     k: '0;0.26;0.34;0.4;0.42;0.45;0.47;0.51;0.68;0.705;0.75;0.86;0.94;1',
-  }) +
-  ` ${move('translate', '0 0;0 0;-5 0;5 0;-7 0;7 0;-8 0;8 0;-5 0;0 0;0 0', 10, { k: '0;0.14;0.155;0.17;0.185;0.2;0.215;0.23;0.245;0.26;1' })}">` +
-  HAIR +
-  `<g shape-rendering="crispEdges" fill="#e9525c">` +
-  `<rect x="32" y="0" width="192" height="96"/>` +
-  `<rect x="0" y="48" width="32" height="32" transform="${ARM_JAB}"/><rect x="224" y="48" width="32" height="32" transform="${ARM_UP}"/>` +
-  leg(48, 0) + leg(80, -0.7) + leg(160, -0.7) + leg(192, 0) +
-  eye(48) + eye(144) +
-  `</g>` +
-  FRINGE +
-  `<g stroke="#5a1620" stroke-width="8" stroke-linecap="square"${anim('opacity', '0;1;0', 10, { k: '0;0.15;0.97', discrete: true })}>` +
-  `<line x1="34" y1="4" x2="74" y2="18"/><line x1="178" y1="4" x2="138" y2="18"/></g>` +
-  `<g${anim('opacity', '0;0.6;1;0', 10, { k: '0;0.16;0.26;0.95', discrete: true })}>${BODY_ARCS}</g>` +
-  `<g${anim('opacity', '0;0;0.95;0;0', 10, { k: '0;0.24;0.26;0.33;1' })}>` +
-  `${pivot(128, 40, move('scale', '0.2;0.2;0.6;3.2;0.2', 10, { k: '0;0.24;0.26;0.33;1' }), '<circle cx="128" cy="40" r="120" fill="#fffbe0"/>')}</g>` +
+  })(
+    move('translate', '0 0;0 0;-5 0;5 0;-7 0;7 0;-8 0;8 0;-5 0;0 0;0 0', 10, { k: '0;0.14;0.155;0.17;0.185;0.2;0.215;0.23;0.245;0.26;1' })(
+      HAIR +
+        `<g shape-rendering="crispEdges" fill="#e9525c">` +
+        `<rect x="32" y="0" width="192" height="96"/>` +
+        ARM_JAB('<rect x="0" y="48" width="32" height="32"/>') +
+        ARM_UP('<rect x="224" y="48" width="32" height="32"/>') +
+        leg(48, 0) + leg(80, -0.7) + leg(160, -0.7) + leg(192, 0) +
+        eye(48) + eye(144) +
+        `</g>` +
+        FRINGE +
+        `<g stroke="#5a1620" stroke-width="8" stroke-linecap="square" opacity="0">${anim('opacity', '0;1;0', 10, { k: '0;0.15;0.97', discrete: true })}` +
+        `<line x1="34" y1="4" x2="74" y2="18"/><line x1="178" y1="4" x2="138" y2="18"/></g>` +
+        `<g opacity="0">${anim('opacity', '0;0.6;1;0', 10, { k: '0;0.16;0.26;0.95', discrete: true })}${BODY_ARCS}</g>` +
+        `<g opacity="0">${anim('opacity', '0;0;0.95;0;0', 10, { k: '0;0.24;0.26;0.33;1' })}` +
+        `${pivot(128, 40, move('scale', '0.2;0.2;0.6;3.2;0.2', 10, { k: '0;0.24;0.26;0.33;1' }), '<circle cx="128" cy="40" r="120" fill="#fffbe0"/>')}</g>`,
+    ),
+  ) +
   `</g>`
 
 // L'aura et les arcs enflent avec la transformation.
 const power = (content: string) =>
-  `<g${anim('opacity', '0.55;0.55;1;1;1;0.55', 10, { k: '0;0.18;0.28;0.32;0.94;1' })}>` +
+  `<g>${anim('opacity', '0.55;0.55;1;1;1;0.55', 10, { k: '0;0.18;0.28;0.32;0.94;1' })}` +
   `${pivot(800, 930, move('scale', '0.4;0.4;1.1;1;1;0.4', 10, { k: '0;0.18;0.28;0.32;0.94;1' }), content)}</g>`
 
 // Tout ce qui suit la mascotte : sur 20 s elle décolle, traverse l'écran, se
 // pose à gauche en se retournant, puis revient à droite.
 const HERO =
-  `<g class="hero" transform="translate(540 0) translate(800 930) scale(0.85) translate(-800 -930)"><g transform="` +
+  `<g class="hero" transform="translate(540 0) translate(800 930) scale(0.85) translate(-800 -930)">` +
   move('translate', '0 0;0 0;-150 -300;-1150 -260;-1200 0;-1200 0;-1050 -300;-100 -280;0 0;0 0', 20, {
     k: '0;0.3;0.36;0.44;0.48;0.8;0.84;0.92;0.96;1',
-  }) +
-  '">' +
-  pivot(
+  })(pivot(
     800,
     0,
     move('scale', '1 1;1 1;-1 1;-1 1;1 1;1 1', 20, { k: '0;0.48;0.5;0.96;0.98;1' }),
     `<ellipse cx="800" cy="925" rx="560" ry="90" fill="url(#floor)"/>` +
-      `<g ${BOLT_ATTRS}${anim('opacity', '0;1;0.3;1;0.5;0;0.9;0;0.7;0', 10, { k: '0;0.245;0.26;0.27;0.29;0.305;0.6;0.61;0.62;0.63', discrete: true })}>${boltLines(800, 77)}</g>` +
+      `<g ${BOLT_ATTRS} opacity="0">${anim('opacity', '0;1;0.3;1;0.5;0;0.9;0;0.7;0', 10, { k: '0;0.245;0.26;0.27;0.29;0.305;0.6;0.61;0.62;0.63', discrete: true })}${boltLines(800, 77)}</g>` +
       power(
         auraLayer(330, 830, 9, 101, '#ffb000', 0.6, 1.7) +
           auraLayer(250, 730, 8, 202, 'url(#gold)', 0.85, 1.3) +
           auraLayer(150, 560, 7, 303, '#fffbe0', 0.8, 1.1) +
-          `<g${anim('opacity', '0.75;1;0.75', 2.2)}>${pivot(800, 640, move('scale', '1;1.1;1', 2.2), '<ellipse cx="800" cy="640" rx="210" ry="330" fill="url(#core)"/>')}</g>`,
+          `<g>${anim('opacity', '0.75;1;0.75', 2.2)}${pivot(800, 640, move('scale', '1;1.1;1', 2.2), '<ellipse cx="800" cy="640" rx="210" ry="330" fill="url(#core)"/>')}</g>`,
       ) +
       MASCOT +
       SPARKS +
       power(ARCS),
-  ) +
-  `</g></g>`
+  )) +
+  `</g>`
 
 return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
 <defs>
@@ -389,9 +378,8 @@ ${HERO}
 </svg>`
 }
 
-// Le moteur ne redessine le fond que deux fois par seconde, quelle que soit la
-// cadence demandée (mesuré) : inutile de demander plus souvent.
-const FRAME_MS = 500
+// La scène ne change jamais : elle est calculée une seule fois.
+const SCENE = scene()
 
 const GLASS = { blur: 10, tint: '#080d1a', opacity: 0.6 }
 
@@ -420,9 +408,6 @@ export const register: Register = on => {
         // Attribut refusé par cet hôte : forme suivante.
       }
     }
-    // Chaque battement redemande le fond ; un rechargement du mod l'annule.
-    $.clock.every(FRAME_MS, () => $.ui.invalidate('ui.render'))
-
     return next(e)
   })
 
@@ -434,6 +419,6 @@ export const register: Register = on => {
     }
     const { Svg } = $.ui.resolve(e)
 
-    return <Svg source={scene((Math.floor(Date.now() / FRAME_MS) % 7200) / 2)} alt="La mascotte en pixels se transforme : cheveux dorés dressés, aura en pointes, éclairs sous un ciel d'orage" />
+    return <Svg source={SCENE} isInteractive alt="La mascotte en pixels se transforme : cheveux dorés dressés, aura en pointes, éclairs sous un ciel d'orage" />
   })
 }

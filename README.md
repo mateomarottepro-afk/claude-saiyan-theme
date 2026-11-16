@@ -23,14 +23,14 @@ Dans l'app desktop : cliquer sur + à côté de la zone de saisie, puis Plugins,
 ## Ce que fait le mod
 
 - Applique un thème sombre (fonds bleu nuit, texte crème, accent or).
-- Dessine un fond animé : transformation toutes les 10 secondes, traversée de l'écran toutes les 20 secondes.
+- Dessine un fond animé fluide : transformation toutes les 10 secondes, traversée de l'écran toutes les 20 secondes.
 - Le fond n'apparaît que dans l'app desktop et l'app mobile, pas dans le terminal.
 
-L'app ne redessine le fond que deux fois par seconde : l'animation est donc volontairement en poses tenues, façon image par image.
+L'animation est un seul SVG animé que l'app joue elle-même, de façon fluide. Il faut une version récente de l'app Claude.
 
 ## Ce que le mod ne fait pas
 
-Le module n'appelle que le thème, une minuterie et le redessin du fond. Il ne lit ni n'écrit aucun fichier, ne lance aucun programme, ne fait aucune requête réseau et ne touche ni aux prompts ni aux outils.
+Le module n'appelle que le thème et le dessin du fond. Il ne lit ni n'écrit aucun fichier, ne lance aucun programme, ne fait aucune requête réseau et ne touche ni aux prompts ni aux outils.
 
 ## Crédits
 
