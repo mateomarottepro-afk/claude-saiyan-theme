@@ -393,11 +393,16 @@ ${HERO}
 // cadence demandée (mesuré) : inutile de demander plus souvent.
 const FRAME_MS = 500
 
-const LOOK: ThemeSetArgs = {
-  colors: theme,
-  overrideColorScheme: 'dark',
-  backdrop: { scene: 'aura', glass: { blur: 10, tint: '#080d1a', opacity: 0.6 } },
-}
+const GLASS = { blur: 10, tint: '#080d1a', opacity: 0.6 }
+
+// Les hôtes n'acceptent pas tous les mêmes attributs de `$.theme.set` : un
+// attribut inconnu fait refuser tout l'appel. On essaie donc du plus complet au
+// plus simple, et le premier accepté gagne.
+const LOOKS = [
+  { colors: theme, overrideColorScheme: 'dark', backdrop: { scene: 'aura', glass: GLASS } },
+  { colors: theme, backdrop: { id: 'aura', colorScheme: 'dark', glass: GLASS } },
+  { backdrop: { id: 'aura', colorScheme: 'dark', glass: GLASS } },
+] as unknown as ThemeSetArgs[]
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -406,7 +411,15 @@ export const register: Register = on => {
     if (unpainted !== undefined) {
       $.ui.toast(unpainted)
     }
-    await $.theme.set(LOOK)
+
+    for (const look of LOOKS) {
+      try {
+        await $.theme.set(look)
+        break
+      } catch {
+        // Attribut refusé par cet hôte : forme suivante.
+      }
+    }
     // Chaque battement redemande le fond ; un rechargement du mod l'annule.
     $.clock.every(FRAME_MS, () => $.ui.invalidate('ui.render'))
 
@@ -414,7 +427,9 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
-    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || e.props.scene !== 'aura') {
+    const props = e.props as { id?: string; scene?: string }
+
+    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || (props.id ?? props.scene) !== 'aura') {
       return next(e)
     }
     const { Svg } = $.ui.resolve(e)
