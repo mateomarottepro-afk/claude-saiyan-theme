@@ -25,6 +25,8 @@ const { theme, problems } = makeColors({
 // --- Scène : orage, éclairs, aura dorée en pointes, sol rocheux, mascotte. ---
 // La scène est un seul SVG animé en SMIL, dessiné en mode interactif : l'app le
 // joue elle-même, de façon fluide, sans que le mod ait à le redessiner.
+// Les valeurs posées sur les éléments font une image fixe, la mascotte
+// transformée, que l'app affiche quand elle coupe les animations.
 
 type Timing = { k?: string; begin?: number; discrete?: boolean }
 type Wrap = (content: string) => string
@@ -89,7 +91,7 @@ const auraLayer = (halfW: number, height: number, n: number, seed: number, fill:
     [0, 1, 2]
       .map(
         k =>
-          `<polygon points="${aura(800, 930, halfW, height, n, seed + k * 7)}" fill="${fill}" fill-opacity="${opacity}">` +
+          `<polygon points="${aura(800, 930, halfW, height, n, seed + k * 7)}" fill="${fill}" fill-opacity="${opacity}"${k ? ' opacity="0"' : ''}>` +
           `${anim('opacity', '1;0;0', 1.5, { k: '0;0.334;1', begin: -1.5 + k * 0.5, discrete: true })}</polygon>`,
       )
       .join(''),
@@ -131,7 +133,7 @@ const BOLT_ATTRS = 'fill="none" stroke-linejoin="round" stroke-linecap="round"'
 
 // Éclair du ciel : il se trace de haut en bas, clignote, puis s'éteint.
 const skyBolt = (x: number, seed: number, dur: number, begin: number, thin = false) =>
-  `<g ${BOLT_ATTRS}${thin ? ` transform="translate(${x} 0) scale(0.6 1) translate(${-x} 0)"` : ''}>` +
+  `<g ${BOLT_ATTRS}${thin ? ` opacity="0" transform="translate(${x} 0) scale(0.6 1) translate(${-x} 0)"` : ''}>` +
   `${anim('opacity', '1;1;0.2;1;0.35;1;0;0', dur, { k: '0;0.03;0.045;0.06;0.08;0.1;0.15;1', begin })}` +
   `${boltLines(x, seed)}</g>`
 
@@ -239,7 +241,7 @@ const lock = (bx: number, w: number, tx: number, ty: number, fill: string, i: nu
 
 // Les cheveux jaillissent à la transformation (cycle de 10 s) puis retombent.
 const hairRise = (content: string) =>
-  `<g opacity="0">${anim('opacity', '0;1', 10, { k: '0;0.255', discrete: true })}` +
+  `<g>${anim('opacity', '0;1', 10, { k: '0;0.255', discrete: true })}` +
   `${pivot(128, 6, move('scale', '1 0;1 0;1.06 1.18;1 1;1 1;1 0', 10, { k: '0;0.25;0.285;0.32;0.94;1' }), content)}</g>`
 
 // Mèches dressées en éventail : un rang sombre derrière, un rang clair devant.
@@ -271,7 +273,7 @@ const ARM_JAB = move(
 )
 const leg = (x: number, begin: number) => move('translate', '0 0;0 -5;0 0', 1.4, { begin })(`<rect x="${x}" y="96" width="16" height="32"/>`)
 const eye = (x: number) =>
-  `<rect x="${x}" y="20" width="16" height="32" fill="#1b1b1b">${anim('fill', '#1b1b1b;#22e0d0;#1b1b1b', 10, { k: '0;0.26;0.97', discrete: true })}</rect>`
+  `<rect x="${x}" y="20" width="16" height="32" fill="#22e0d0">${anim('fill', '#1b1b1b;#22e0d0;#1b1b1b', 10, { k: '0;0.26;0.97', discrete: true })}</rect>`
 
 // Mascotte en pixels : forme normale, puis cheveux dorés dressés, regard turquoise.
 // Trois mouvements emboîtés : flottement et charges, tremblement, puis le corps.
